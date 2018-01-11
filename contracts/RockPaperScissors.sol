@@ -85,7 +85,7 @@ contract RockPaperScissors {
         payable
         returns (bool success)
     {
-        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
+        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be realised/written/still getting figured out :)
         require(moveStore[gameId].moveResult == moveResultStates.Playing);
         require(gameStore[gameId].expiryBlock < block.number);  //game has not expired
         require(gameStore[gameId].firstPlayer != msg.sender);   //first player shouldn't join its own game
@@ -108,7 +108,7 @@ contract RockPaperScissors {
         payable
         returns (bool success)
     {
-        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
+        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be realised/written/still getting figured out :)
         require(moveStore[gameId].moveResult != moveResultStates.Won);
         require(moveStore[gameId].moveResult != moveResultStates.Terminated);
         require(gameStore[gameId].expiryBlock < block.number);   //game has not expired
