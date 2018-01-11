@@ -28,13 +28,14 @@ contract RockPaperScissors {
         uint expiryBlock;
     }
     
+    enum  moveResultStates { Default, Playing, Won, Tied, Terminated }
     struct moveStruct {
         bytes32 firstPlayerMove;
         bytes32 secondPlayerMove;
         moveResultStates moveResult;
     }
     
-    enum  moveResultStates { Default, Playing, Won, Lost, Tied, Terminated }
+    
     //move result states = playing, Won , lost, tied
     
     mapping (bytes32 => gameStruct) gameStore;
@@ -77,14 +78,15 @@ contract RockPaperScissors {
         return newGameId;
     }
     
+    
     function joinAndMakeMove(bytes32 gameId, bytes32 move)
         public 
         onlyWhenLive
         payable
-        returns (moveResultStates result)
+        returns (bool success)
     {
-        require(gameStore[gameId].firstPlayer != address(0));   //Ensure game is not over
-        require(gameStore[gameId].expiryBlock < block.number); //game has not expired
+        require(moveStore[gameId].moveResult == moveResultStates.Playing);
+        require(gameStore[gameId].expiryBlock < block.number);  //game has not expired
         require(gameStore[gameId].firstPlayer != msg.sender);   //first player shouldn't join its own game
         require(msg.value > ownerCut);
         
@@ -93,15 +95,20 @@ contract RockPaperScissors {
         moveStore[gameId].secondPlayerMove = move;
         
         LogSecondPlayerJoinedGame(gameId, gameStore[gameId].secondPlayer, gameStore[gameId].secondStake );
+        
+        getGameResult(gameId);
+        
+        return true;
     }
     
     function makeMove(bytes32 gameId, bytes32 move)
         public
         onlyWhenLive
         payable
-        returns (moveResultStates result)
+        returns (bool success)
     {
-        require(gameStore[gameId].firstPlayer != address(0));   //Ensure game is not over
+        require(moveStore[gameId].moveResult != moveResultStates.Won);
+        require(moveStore[gameId].moveResult != moveResultStates.Terminated);
         require(gameStore[gameId].expiryBlock < block.number);   //game has not expired
         require(gameStore[gameId].firstStake  != 0); 
         require(gameStore[gameId].secondStake != 0); 
@@ -114,70 +121,87 @@ contract RockPaperScissors {
             revert(); //only the 2 addresses can make moves
         
         
-        //calculate
+        getGameResult(gameId);
         
-            //end gam
-            gameStore[gameId].firstPlayer == address(0);
-        
-        return moveResultStates.Default;
+        return true;
     }
+    
     
     function terminateGame(bytes32 gameId)
         public 
         onlyWhenLive
         returns (bool success)
     {
-        //game is not termiated already
-        require(gameStore[gameId].firstPlayer != address(0));
-        //game has not expired
-        require(gameStore[gameId].expiryBlock < block.number);
-        //can only terminate when tied
-        require(moveStore[gameId].moveResult == moveResultStates.Tied);
+        //game is not termiated,Won already
+        require(moveStore[gameId].moveResult != moveResultStates.Won);
+        require(moveStore[gameId].moveResult != moveResultStates.Terminated);
         
         //must be only the two players
         if(msg.sender == gameStore[gameId].firstPlayer) { }
         else if (msg.sender == gameStore[gameId].firstPlayer){ }
         else { revert(); }
         
-        gameStore[gameId].firstPlayer.transfer(gameStore[gameId].firstStake);
-        gameStore[gameId].secondPlayer.transfer(gameStore[gameId].secondStake);
-        
-        gameStore[gameId].firstPlayer == address(0); 
-        
         moveStore[gameId].moveResult = moveResultStates.Terminated;
-        LogGameTerminated(gameId, msg.sender,gameStore[gameId].firstStake, gameStore[gameId].secondStake);
+        LogGameTerminated(gameId, msg.sender, gameStore[gameId].firstStake, gameStore[gameId].secondStake);
         
         return true;
     }
     
-    function gameOver(bytes32 gameId, address winner)
-        private
-    {
-        gameStore[gameId].firstPlayer != address(0);
-        uint prize = gameStore[gameId].firstStake +  gameStore[gameId].secondStake;
-        winner.transfer(prize);
-    }
-    
-    function withdraw(bytes32 gameId)
+     function withdraw(bytes32 gameId)
         public 
         onlyWhenLive
         returns (bool success)
     {
         //Only the two players
         if(msg.sender == gameStore[gameId].firstPlayer) {
-            require(gameStore[gameId].firstStake != 0);
+            //revert if player has lost game
+            require(gameStore[gameId].firstStake != 0);         
             gameStore[gameId].firstPlayer.transfer(gameStore[gameId].firstStake);
-            Log
+            //LogPlayerWithdrwal()
         }
         else if (msg.sender == gameStore[gameId].firstPlayer){
             require(gameStore[gameId].secondStake != 0);
-            
+            gameStore[gameId].firstPlayer.transfer(gameStore[gameId].firstStake);
+            //LogPlayerWithdrwal()
         }
         else { revert(); }
         
         
-        return false;
+        return true;
     }
+    
+    //------------------------------
+    //private methods
+    
+    function gameOver(bytes32 gameId, address winner)
+        private
+    {
+         if(winner == gameStore[gameId].firstPlayer) {
+            gameStore[gameId].firstStake +=  gameStore[gameId].secondStake;
+            gameStore[gameId].secondStake = 0;
+         }
+         else if (winner == gameStore[gameId].firstPlayer) {
+            gameStore[gameId].secondStake +=  gameStore[gameId].firstStake;
+            gameStore[gameId].firstStake = 0;
+         }
+         moveStore[gameId].moveResult = moveResultStates.Won;
+    }
+    
+    function getGameResult(bytes32 gameId)
+        private
+    {
+        //interpret moveStore
+        
+        //if move1 == move 2, set status = Tied 
+        //Tied matrix   (S,S), (R,R), (P,P)
+        moveStore[gameId].moveResult = moveResultStates.Tied;
+        
+        // Result matrix (1, 2, Winner)
+        //(S,P,1), (S,R,2), (R,S,1) , (R,P,2), (P,R,1), (P,S,1)
+        //
+    }
+    
+   
     
     //-----------------------------------------------------------------------
     //Owner functions
