@@ -85,6 +85,7 @@ contract RockPaperScissors {
         payable
         returns (bool success)
     {
+        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
         require(moveStore[gameId].moveResult == moveResultStates.Playing);
         require(gameStore[gameId].expiryBlock < block.number);  //game has not expired
         require(gameStore[gameId].firstPlayer != msg.sender);   //first player shouldn't join its own game
@@ -107,6 +108,7 @@ contract RockPaperScissors {
         payable
         returns (bool success)
     {
+        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
         require(moveStore[gameId].moveResult != moveResultStates.Won);
         require(moveStore[gameId].moveResult != moveResultStates.Terminated);
         require(gameStore[gameId].expiryBlock < block.number);   //game has not expired
@@ -190,15 +192,18 @@ contract RockPaperScissors {
     function getGameResult(bytes32 gameId)
         private
     {
-        //interpret moveStore
+        //TODO: interpret move string as one of {rock, paper, scissor}
         
         //if move1 == move 2, set status = Tied 
         //Tied matrix   (S,S), (R,R), (P,P)
         moveStore[gameId].moveResult = moveResultStates.Tied;
+        moveStore[gameId].firstPlayerMove = '';
+        moveStore[gameId].secondPlayerMove = '';
         
         // Result matrix (1, 2, Winner)
         //(S,P,1), (S,R,2), (R,S,1) , (R,P,2), (P,R,1), (P,S,1)
-        //
+        
+        // TODO: Detrmine Win / Tie. Set storage values accordingly.
     }
     
    
