@@ -4,16 +4,23 @@ import "./Owned.sol";
 
 contract RockPaperScissors is Owned {
     
-    enum  moveResultStates { Default, Playing, Won, Tied, Terminated }
+    enum moveResultStates { Default, Started, Playing, Won, Tied, Terminated }
+    enum moveState {Default, Rock, Paper, Scissor}
     
     struct GameStruct {
         address firstPlayer;
-        address secondPlayer;
         uint firstStake;
+        uint firstPlayerMove;
+        bytes32 firstMoveSecretHash;
+        uint  firstMoveSecret;
+        
+        address secondPlayer;
         uint secondStake;
+        uint secondPlayerMove;
+        bytes32 secondMoveSecretHash;
+        uint secondMoveSecret;
+        
         uint expiryBlock;
-        bytes32 firstPlayerMove;
-        bytes32 secondPlayerMove;
         moveResultStates moveResult;
         uint    moveNonce;
     }
@@ -26,7 +33,7 @@ contract RockPaperScissors is Owned {
         owner = msg.sender;
     }
     
-    function startGame(bytes32 firstMove) 
+    function startGame() 
         public
         payable
         onlyWhenLive
@@ -34,78 +41,109 @@ contract RockPaperScissors is Owned {
     {
         require(msg.value > ownerCut);
         
+        uint stake = (msg.value - ownerCut);
+        ownerBank += ownerCut; //pay self
+        LogCommisionPayed(ownerCut);
+        
         //Create Game
         GameStruct memory newGame = GameStruct({
             firstPlayer : msg.sender,
+            firstStake : stake,
+            firstPlayerMove : 0,
+            firstMoveHash : '',
             secondPlayer : address(0), 
-            firstStake : (msg.value - ownerCut),
             secondStake : 0, 
+            secondPlayerMove : 0,
+            secondMoveHash: '',
             expiryBlock : block.number + gameDuration,
-            firstPlayerMove : firstMove,
-            secondPlayerMove : '',
-            moveResult: moveResultStates.Playing,
+            moveResult: moveResultStates.Started,
             moveNonce : 1
         });
-        
-        ownerBank += ownerCut; //pay self
-        LogCommisionPayed(ownerCut);
         bytes32 newGameId = keccak256(msg.sender, gameNonce++);
         gameStore[newGameId] = newGame;
         
+        LogGameStarted(newGameId,  msg.sender, block.number + gameDuration);
+        LogPlayerJoinedGame(newGameId,  msg.sender, stake );
         return newGameId;
     }
     
     
-    function joinAndMakeMove(bytes32 gameId, bytes32 move)
+    function joinGame(bytes32 gameId)
         public 
         onlyWhenLive
         payable
         returns (bool success)
     {
         //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
-        require(gameStore[gameId].moveResult == moveResultStates.Playing);
+        require(gameStore[gameId].moveResult == moveResultStates.Started);
         require(gameStore[gameId].expiryBlock < block.number);  //game has not expired
         require(gameStore[gameId].firstPlayer != msg.sender);   //first player shouldn't join its own game
-        require(msg.value >= gameStore[gameId].firstStake);     //second palyer can't lowball the stake price
         
-        gameStore[gameId].secondStake = (msg.value - ownerCut);
+        uint stake2 = (msg.value - ownerCut);
+        require(stake2 >= gameStore[gameId].firstStake);     //second player can't lowball the stake price
+        
+       
         ownerBank += ownerCut; //pay self
         LogCommisionPayed(ownerCut);
-        gameStore[gameId].secondPlayerMove = move;
         
-        LogSecondPlayerJoinedGame(gameId, gameStore[gameId].secondPlayer, gameStore[gameId].secondStake );
+        gameStore[gameId].secondPlayer = msg.sender;
+        gameStore[gameId].secondStake = stake2;
+        gameStore[gameId].moveResult = moveResultStates.Playing;
         
+        
+        LogPlayerJoinedGame(gameId, msg.sender, stake2 );
         getGameResult(gameId);
         
         return true;
     }
     
-    function makeMove(bytes32 gameId, bytes32 move)
-        public
+    function submitMove(bytes32 gameId, uint move, bytes32 hashedSecret)
+        public 
         onlyWhenLive
-        returns (bool success)
+        returns(bool success)
     {
-        //here move is a hashed value, using a secret given to the player offline. The construction of which is yet to be relised/written/still getting figured out :)
-        require(gameStore[gameId].moveResult != moveResultStates.Won);
-        require(gameStore[gameId].moveResult != moveResultStates.Terminated);
+        require(gameStore[gameId].moveResult == moveResultStates.Playing);
         require(gameStore[gameId].expiryBlock < block.number);   //game has not expired
-        require(gameStore[gameId].firstStake  != 0); 
-        require(gameStore[gameId].secondStake != 0); 
         
-        if ( msg.sender == gameStore[gameId].firstPlayer)
-           // require();
+        if ( msg.sender == gameStore[gameId].firstPlayer ){           // require();
             gameStore[gameId].firstPlayerMove = move;
-        else if(msg.sender == gameStore[gameId].secondPlayer) 
+            gameStore[gameId].firstMoveHash = hashedSecret;
+        }
+        else if(msg.sender == gameStore[gameId].secondPlayer) {
             gameStore[gameId].secondPlayerMove = move;
+            gameStore[gameId].secondMoveHash = hashedSecret;
+        }
         else 
             revert(); //only the 2 addresses can make moves
         
-        
-        getGameResult(gameId);
-        
+        LogPlayerSubmittedMove(gameId, msg.sender, move, hashedSecret);
         return true;
     }
     
+    function revealMove(bytes32 gameId, uint secret)
+        public 
+        onlyWhenLive
+        returns (bool success)
+    {
+        require(gameStore[gameId].moveResult == moveResultStates.Playing);
+        require(gameStore[gameId].expiryBlock < block.number);   //game has not expired
+         
+        if(msg.sender == gameStore[gameId].firstPlayer) { 
+            require(gameStore[gameId].firstMoveSecret == 0);
+            gameStore[gameId].firstMoveSecret = secret;
+            LogPlayerRevealedMove( gameId, msg.sender, secret);
+            if (gameStore[gameId].secondMoveSecret != 0){ getGameResult(gameId);}
+        }
+        else if (msg.sender == gameStore[gameId].secondPlayer){ 
+            require(gameStore[gameId].secondMoveSecret == 0);
+            gameStore[gameId].secondMoveSecret = secret;
+            LogPlayerRevealedMove( gameId, msg.sender, secret);
+            if (gameStore[gameId].firstMoveSecret != 0){getGameResult(gameId);}
+        }
+        else { revert(); } 
+        
+        return true;
+    }
     
     function terminateGame(bytes32 gameId)
         public 
@@ -132,6 +170,8 @@ contract RockPaperScissors is Owned {
         onlyWhenLive
         returns (bool success)
     {
+        require(gameStore[gameId].moveResult != moveResultStates.Tied);
+        require(gameStore[gameId].moveResult != moveResultStates.Playing);
         //Only the two players
         if(msg.sender == gameStore[gameId].firstPlayer) {
             //revert if player has lost game
@@ -148,6 +188,14 @@ contract RockPaperScissors is Owned {
         
         
         return true;
+    }
+    
+    function generateMove(uint secret, moveState move)
+        public
+        pure
+        onlyWhenLive
+    {
+        //split 
     }
     
     //------------------------------
