@@ -19,13 +19,15 @@ contract Owned {
         _;
     }
     
-    event LogContractStateChanged   (bool contractState);
-    event LogGameStarted            (bytes32 indexed gameId, address indexed firstPlayer, uint firstStake);
-    event LogSecondPlayerJoinedGame (bytes32 indexed gameId, address indexed secondPlayer,  uint secondStake );
+    event LogGameStarted            (bytes32 indexed gameId, address indexed player, uint expiryBlock);
+    event LogPlayerJoinedGame       (bytes32 indexed gameId, address indexed player,  uint stake );
+    event LogPlayerSubmittedMove    (bytes32 indexed gameId, address indexed player, uint move, bytes32 hashedSecret);
+    event LogPlayerRevealedMove     (bytes32 indexed gameId, address indexed player, uint secret);
     event LogGameTerminated         (bytes32 indexed gameId, address indexed terminator, uint firstStake, uint secondStake);
+   
     event LogOwnerWithdrwal         (uint withdrawAmount);
     event LogCommisionPayed         (uint payedAmount);
-    
+    event LogContractStateChanged   (bool contractState);
     
     function setContractState(bool _onOff)
         public 
@@ -49,14 +51,6 @@ contract Owned {
         
         LogOwnerWithdrwal(_withdrawAmount);
         return true;
-    }
-    
-    function KillMe()
-        public
-        onlyOwner
-    {
-        require(isStopped);
-        selfdestruct(owner);
     }
     
 }
