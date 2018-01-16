@@ -232,5 +232,13 @@ contract RockPaperScissors is Owned {
         // TODO: Detrmine Win / Tie. Set storage values accordingly.
     }
     
+     function KillMe()
+        public
+        onlyOwner
+    {
+        require(isStopped);
+        selfdestruct(owner);
+    }
+    
     function () public {revert();} 
 }
